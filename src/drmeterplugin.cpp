@@ -20,6 +20,7 @@ namespace {
 constexpr auto MenuId        = "Fooyin.Menu.DynamicRangeMeter";
 constexpr auto TrackActionId = "DynamicRange.Scan.Track";
 constexpr auto AlbumActionId = "DynamicRange.Scan.Album";
+constexpr auto AlbumsActionId = "DynamicRange.Scan.AlbumsByTags";
 }
 
 void DRMeterPlugin::initialise(const CorePluginContext& context)
@@ -49,8 +50,10 @@ void DRMeterPlugin::registerActions()
 
     auto* trackAction = new QAction(tr("Scan per track"), this);
     auto* albumAction = new QAction(tr("Scan as one album"), this);
+    auto* albumsAction = new QAction(tr("Scan as albums (by tags)"), this);
     QObject::connect(trackAction, &QAction::triggered, this, [this] { startScan(ScanMode::Track); });
     QObject::connect(albumAction, &QAction::triggered, this, [this] { startScan(ScanMode::Album); });
+    QObject::connect(albumsAction, &QAction::triggered, this, [this] { startScan(ScanMode::AlbumsByTags); });
 
     const auto registerAction = [this](QAction* action, const char* id) {
         m_selection->registerTrackContextAction(
@@ -62,6 +65,7 @@ void DRMeterPlugin::registerActions()
     };
     registerAction(trackAction, TrackActionId);
     registerAction(albumAction, AlbumActionId);
+    registerAction(albumsAction, AlbumsActionId);
 }
 
 void DRMeterPlugin::startScan(ScanMode mode)

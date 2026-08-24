@@ -6,6 +6,8 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
+#include <vector>
 
 class QDialogButtonBox;
 class QLabel;
@@ -38,6 +40,8 @@ private:
     TrackDRResults m_results;
     ScanMode m_mode;
     int m_albumScore{0};
+    std::vector<std::optional<int>> m_groupScores;
+    std::vector<bool> m_groupWritable;
     bool m_writing{false};
     std::function<void()> m_cancelWrite;
 

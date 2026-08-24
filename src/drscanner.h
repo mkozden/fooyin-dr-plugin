@@ -19,6 +19,7 @@ enum class ScanMode : uint8_t
 {
     Track,
     Album,
+    AlbumsByTags,
 };
 
 struct TrackDRResult

@@ -14,6 +14,8 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <map>
+#include <ranges>
 
 using namespace Qt::StringLiterals;
 
@@ -25,7 +27,9 @@ DRResultsDialog::DRResultsDialog(MusicLibrary* library, std::shared_ptr<AudioLoa
     , m_audioLoader{std::move(audioLoader)}
     , m_results{std::move(results)}
     , m_mode{mode}
-    , m_table{new QTableWidget(static_cast<int>(m_results.size()), 6, this)}
+    , m_groupScores(m_results.size())
+    , m_groupWritable(m_results.size(), false)
+    , m_table{new QTableWidget(static_cast<int>(m_results.size()), 8, this)}
     , m_status{new QLabel(this)}
     , m_buttons{new QDialogButtonBox(QDialogButtonBox::Close, this)}
     , m_writeButton{m_buttons->addButton(tr("Update File Tags"), QDialogButtonBox::AcceptRole)}
@@ -35,8 +39,8 @@ DRResultsDialog::DRResultsDialog(MusicLibrary* library, std::shared_ptr<AudioLoa
     setWindowTitle(tr("Dynamic Range Scan Results"));
     resize(850, 420);
 
-    m_table->setHorizontalHeaderLabels(
-        {tr("Track"), tr("DR"), tr("Peak"), tr("RMS"), tr("Duration"), tr("Status")});
+    m_table->setHorizontalHeaderLabels({tr("Track"), tr("Album"), tr("DR"), tr("Album DR"), tr("Peak"),
+                                        tr("RMS"), tr("Duration"), tr("Status")});
     m_table->verticalHeader()->hide();
     m_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     for(int column{1}; column < m_table->columnCount(); ++column) {
@@ -51,19 +55,21 @@ DRResultsDialog::DRResultsDialog(MusicLibrary* library, std::shared_ptr<AudioLoa
         const auto& result = m_results[index];
         const int row      = static_cast<int>(index);
         m_table->setItem(row, 0, new QTableWidgetItem(result.track.effectiveTitle()));
-        m_table->setItem(row, 4, new QTableWidgetItem(QString::number(result.track.duration() / 1000) + u" s"_s));
+        if(m_mode == ScanMode::AlbumsByTags) {
+            m_table->setItem(row, 1, new QTableWidgetItem(albumGroupLabel(result.track)));
+        }
+        else if(m_mode == ScanMode::Album) {
+            m_table->setItem(row, 1, new QTableWidgetItem(tr("Selection")));
+        }
+        m_table->setItem(row, 6, new QTableWidgetItem(QString::number(result.track.duration() / 1000) + u" s"_s));
 
         if(result.value.valid) {
             scores.push_back(result.value.score);
-            m_table->setItem(row, 1, new QTableWidgetItem(u"DR%1"_s.arg(result.value.score)));
-            m_table->setItem(row, 2, new QTableWidgetItem(u"%1 dBFS"_s.arg(result.value.peakDb, 0, 'f', 2)));
-            m_table->setItem(row, 3, new QTableWidgetItem(u"%1 dBFS"_s.arg(result.value.rmsDb, 0, 'f', 2)));
+            m_table->setItem(row, 2, new QTableWidgetItem(u"DR%1"_s.arg(result.value.score)));
+            m_table->setItem(row, 4, new QTableWidgetItem(u"%1 dBFS"_s.arg(result.value.peakDb, 0, 'f', 2)));
+            m_table->setItem(row, 5, new QTableWidgetItem(u"%1 dBFS"_s.arg(result.value.rmsDb, 0, 'f', 2)));
             const bool writable = isWritable(result);
             writableCount += writable ? 1 : 0;
-            m_table->setItem(row, 5, new QTableWidgetItem(writable ? tr("Ready") : tr("Display only")));
-        }
-        else {
-            m_table->setItem(row, 5, new QTableWidgetItem(result.value.error));
         }
     }
 
@@ -71,12 +77,76 @@ DRResultsDialog::DRResultsDialog(MusicLibrary* library, std::shared_ptr<AudioLoa
     const bool allWritable = writableCount == static_cast<int>(m_results.size()) && !m_results.empty();
     m_albumScore           = allValid ? DRAnalyzer::albumScore(scores) : 0;
 
-    if(m_mode == ScanMode::Album) {
+    if(m_mode == ScanMode::AlbumsByTags) {
+        struct AlbumGroup
+        {
+            std::vector<size_t> rows;
+        };
+        std::map<QString, AlbumGroup> groups;
+        for(size_t index{0}; index < m_results.size(); ++index) {
+            groups[albumGroupKey(m_results[index].track)].rows.push_back(index);
+        }
+
+        int writableAlbums{0};
+        for(const auto& group : groups | std::views::values) {
+            std::vector<int> groupScores;
+            bool groupCanWrite{!group.rows.empty()};
+            for(const size_t index : group.rows) {
+                const auto& result = m_results[index];
+                if(result.value.valid) {
+                    groupScores.push_back(result.value.score);
+                }
+                else {
+                    groupCanWrite = false;
+                }
+                groupCanWrite = groupCanWrite && isWritable(result);
+            }
+
+            const bool groupValid = groupScores.size() == group.rows.size() && !groupScores.empty();
+            const int groupScore  = groupValid ? DRAnalyzer::albumScore(groupScores) : 0;
+            writableAlbums += groupValid && groupCanWrite ? 1 : 0;
+            for(const size_t index : group.rows) {
+                if(groupValid) {
+                    m_groupScores[index] = groupScore;
+                    m_table->setItem(static_cast<int>(index), 3,
+                                     new QTableWidgetItem(u"DR%1"_s.arg(groupScore)));
+                }
+                m_groupWritable[index] = groupValid && groupCanWrite;
+            }
+        }
+
+        for(size_t index{0}; index < m_results.size(); ++index) {
+            const auto& result = m_results[index];
+            const QString status = !result.value.valid ? result.value.error
+                                   : m_groupWritable[index] ? tr("Ready")
+                                                            : tr("Album incomplete or display only");
+            m_table->setItem(static_cast<int>(index), 7, new QTableWidgetItem(status));
+        }
+        m_status->setText(tr("%1 of %2 albums can be tagged.").arg(writableAlbums).arg(groups.size()));
+        m_writeButton->setEnabled(writableAlbums > 0);
+    }
+    else if(m_mode == ScanMode::Album) {
+        for(size_t index{0}; index < m_results.size(); ++index) {
+            if(allValid) {
+                m_table->setItem(static_cast<int>(index), 3, new QTableWidgetItem(u"DR%1"_s.arg(m_albumScore)));
+            }
+            const auto& result = m_results[index];
+            const QString status = !result.value.valid ? result.value.error
+                                   : allValid && allWritable ? tr("Ready")
+                                                             : tr("Album incomplete or display only");
+            m_table->setItem(static_cast<int>(index), 7, new QTableWidgetItem(status));
+        }
         m_status->setText(allValid ? tr("Official album value: DR%1").arg(m_albumScore)
                                    : tr("Album value unavailable because one or more tracks failed."));
         m_writeButton->setEnabled(allValid && allWritable);
     }
     else {
+        for(size_t index{0}; index < m_results.size(); ++index) {
+            const auto& result = m_results[index];
+            const QString status = !result.value.valid ? result.value.error
+                                                       : isWritable(result) ? tr("Ready") : tr("Display only");
+            m_table->setItem(static_cast<int>(index), 7, new QTableWidgetItem(status));
+        }
         m_status->setText(tr("%1 of %2 tracks can be tagged.").arg(writableCount).arg(m_results.size()));
         m_writeButton->setEnabled(writableCount > 0);
     }
@@ -101,11 +171,18 @@ void DRResultsDialog::writeTags()
 {
     TrackList tracks;
     tracks.reserve(m_results.size());
-    for(const auto& result : m_results) {
-        if(!isWritable(result)) {
+    for(size_t index{0}; index < m_results.size(); ++index) {
+        const auto& result = m_results[index];
+        if(!isWritable(result) || (m_mode == ScanMode::AlbumsByTags && !m_groupWritable[index])) {
             continue;
         }
-        const std::optional<int> albumScore = m_mode == ScanMode::Album ? std::optional{m_albumScore} : std::nullopt;
+        std::optional<int> albumScore;
+        if(m_mode == ScanMode::Album) {
+            albumScore = m_albumScore;
+        }
+        else if(m_mode == ScanMode::AlbumsByTags) {
+            albumScore = m_groupScores[index];
+        }
         tracks.push_back(prepareTaggedTrack(result.track, result.value.score, albumScore));
     }
     if(tracks.empty()) {

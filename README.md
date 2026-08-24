@@ -1,8 +1,9 @@
 # fooyin Dynamic Range Meter
 
 An out-of-tree fooyin plugin that measures the classic TT-style dynamic range
-score for selected tracks. It supports per-track scans and treating a selection
-as one album, with an explicit review step before tags are written.
+score for selected tracks. It supports per-track scans, treating a selection
+as one album, and splitting a selection into albums by album artist, date, and
+album tags, with an explicit review step before tags are written.
 
 The meter writes plain integer values to the compatible `DYNAMIC RANGE` and
 `ALBUM DYNAMIC RANGE` metadata fields. It is an independent, compatibility-
@@ -24,8 +25,8 @@ cmake --install build
 Set `DRMETER_PLUGIN_INSTALL_DIR` at configure time to override the plugin
 destination reported by fooyin's CMake package.
 
-After installation, restart fooyin. The two scan commands appear under the
-selected tracks' **Dynamic Range Meter** context submenu.
+After installation, restart fooyin. The scan commands appear under the selected
+tracks' **Dynamic Range Meter** context submenu.
 
 ## Limitations
 
