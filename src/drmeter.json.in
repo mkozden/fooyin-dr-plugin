@@ -1,0 +1,9 @@
+{
+    "Name": "Dynamic Range Meter",
+    "Version": "@PROJECT_VERSION@",
+    "Author": "fooyin-dr-plugin contributors",
+    "Copyright": "Copyright (c) 2026 fooyin-dr-plugin contributors",
+    "License": "GPL-3.0-or-later",
+    "Category": "Audio.Analysis",
+    "Description": "Calculates classic dynamic range values for selected tracks"
+}

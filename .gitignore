@@ -1,0 +1,26 @@
+# Out-of-source CMake builds
+/build*/
+/cmake-build-*/
+
+# Accidental in-source CMake builds
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/install_manifest.txt
+/CTestTestfile.cmake
+/DartConfiguration.tcl
+/Testing/
+/Makefile
+/build.ninja
+/.ninja_deps
+/.ninja_log
+/compile_commands.json
+/.qt/
+/*_autogen/
+
+# Configured and built outputs
+/drmeter.json
+/fyplugin_drmeter.so*
+/dranalyzertest
+/drtagstest
+/pluginloadtest
